@@ -19,13 +19,14 @@ namespace BCPS_QrCode_Reader
 {
     public partial class Form1 : Form
     {
+        Image pic;
         private FilterInfoCollection CaptureDevice;
         private VideoCaptureDevice FinalFrame;
         private static readonly HttpClient client = new HttpClient();
+        bool ToggleState = false;
         public Form1()
         {
             InitializeComponent();
-
         }
 
         private void Form1_Load(object sender, EventArgs e)
@@ -45,63 +46,102 @@ namespace BCPS_QrCode_Reader
         }
         private void Form1_FormClosing(object sender, FormClosingEventArgs e)
         {
-            if (FinalFrame.IsRunning == true)
-            {
-                FinalFrame.Stop();
-            }
+            killCam();
         }
 
         private void button1_Click_1(object sender, EventArgs e)
         {
-            FinalFrame = new VideoCaptureDevice(CaptureDevice[comboBox1.SelectedIndex].MonikerString);
-            FinalFrame.NewFrame += new NewFrameEventHandler(FinalFrame_NewFrame);
-            FinalFrame.Start();
-        }
-
-        private void button2_Click_1(object sender, EventArgs e)
-        {
-            timer1.Enabled = true;
-            timer1.Start();
-            Console.WriteLine("Scanner Started");
+            Toggler();
         }
 
         private async void timer1_Tick(object sender, EventArgs e)
         {
+            //defines barcode
             BarcodeReader Reader = new BarcodeReader();
-            Result result = Reader.Decode((Bitmap)pictureBox1.Image);
+            //
+            pic = pictureBox1.Image;
+            if(pic == null){return;}
+            Result result;
             try
             {
-                if (result == null) { return; }
-                string decoded = result.ToString().Trim();
-                Console.WriteLine(decoded);
-                if (decoded != "")
-                {
-                    //Stops Timer
-                    timer1.Stop();
-                    //Values to post to api
-                    var values = new Dictionary<string, string>
-                    {
-                        { "f", "gSI" },
-                        { "s", decoded }
-                    };
-                    //packs the vlaues
-                    var content = new FormUrlEncodedContent(values);
-                    //awaits response from server
-                    var response = await client.PostAsync("https://broward.focusschoolsoftware.com/focus/mobileApps/checkIn/index.php", content);
-                    //Converts data to Json Object
-                    JObject data = JObject.Parse(response.Content.ReadAsStringAsync().Result);
-                    //Displayes the output message
-                    MessageBox.Show($"{decoded} : {data.SelectToken("m").ToString()}");
-                    //Form2 form = new Form2();
-                    //form.Show();
-                    //this.Hide();
-
-                }
+                result = Reader.Decode((Bitmap)pic);
             }
-            catch (Exception ex)
+            catch
             {
-
+                return;
             }
+            if (result == null) { return; }
+            string decoded = result.ToString().Trim();
+            Console.WriteLine(decoded);
+            if (decoded != "")
+            {
+                //Stops Timer
+                timer1.Stop();
+                //Values to post to api
+                var values = new Dictionary<string, string>
+                {
+                    { "f", "gSI" },
+                    { "s", decoded }
+                };
+                //packs the values
+                var content = new FormUrlEncodedContent(values);
+                //defines variable outside try
+                HttpResponseMessage response;
+                //awaits response from server
+                try
+                {
+                    response = await client.PostAsync("https://broward.focusschoolsoftware.com/focus/mobileApps/checkIn/index.php", content);
+                }
+                catch
+                {
+                    MessageBox.Show("There was an error communicating with api. make sure your connected to the internet.");
+                    return;
+                }
+                //Converts data to Json Object
+                JObject data = JObject.Parse(response.Content.ReadAsStringAsync().Result);
+                //Displays the output message
+                MessageBox.Show($"{decoded} : {data.SelectToken("m").ToString()}");
+                timer1.Start();
+            }
+        }
+        //kills camera
+        private void killCam()
+        {
+            if (FinalFrame.IsRunning == true)
+            {
+                FinalFrame.Stop();
+                button1.Text = "Start";
+                pictureBox1.Image  = null;
+            }
+        }
+        //toggles on and off
+        private void Toggler()
+        {
+            //on
+            if (ToggleState == false)
+            {
+                comboBox1.Enabled = false;
+                FinalFrame = new VideoCaptureDevice(CaptureDevice[comboBox1.SelectedIndex].MonikerString);
+                FinalFrame.NewFrame += new NewFrameEventHandler(FinalFrame_NewFrame);
+                FinalFrame.Start();
+                timer1.Enabled = true;
+                timer1.Start();
+                Console.WriteLine("Scanner Started");
+                button1.Text = "Stop";
+                ToggleState = true;
+            }
+            else //off
+            {
+                comboBox1.Enabled = true;
+                killCam();
+                button1.Text = "Start";
+                ToggleState = false;
+            }
+        }
+
+        private void pictureBox1_Click(object sender, EventArgs e)
+        {
+
         }
     }
 }
