@@ -2,18 +2,12 @@
 using AForge.Video.DirectShow;
 using System;
 using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
 using System.Drawing;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows.Forms;
 using ZXing;
 using System.Net.Http;
-using Newtonsoft.Json;
-using System.Json;
 using Newtonsoft.Json.Linq;
+using System.Threading;
 
 namespace BCPS_QrCode_Reader
 {
@@ -23,7 +17,6 @@ namespace BCPS_QrCode_Reader
         private FilterInfoCollection CaptureDevice;
         private VideoCaptureDevice FinalFrame;
         private static readonly HttpClient client = new HttpClient();
-        bool ToggleState = false;
         public Form1()
         {
             InitializeComponent();
@@ -31,45 +24,43 @@ namespace BCPS_QrCode_Reader
 
         private void Form1_Load(object sender, EventArgs e)
         {
+            //get cameras
             CaptureDevice = new FilterInfoCollection(FilterCategory.VideoInputDevice);
+            //push cameras to list
             foreach (FilterInfo Device in CaptureDevice)
             {
                 comboBox1.Items.Add(Device.Name);
             }
-
             comboBox1.SelectedIndex = 0;
             FinalFrame = new VideoCaptureDevice();
+            //gets capture devices
+            FinalFrame = new VideoCaptureDevice(CaptureDevice[comboBox1.SelectedIndex].MonikerString);
+            //displays frame
+            FinalFrame.NewFrame += new NewFrameEventHandler(FinalFrame_NewFrame);
+            FinalFrame.Start();
+            timer1.Enabled = true;
+            timer1.Start();
+            Console.WriteLine("Scanner Started");
         }
         private void FinalFrame_NewFrame(object sender, NewFrameEventArgs eventArgs)
         {
+            //makes picturebox1 = video camera feed
             pictureBox1.Image = (Bitmap)eventArgs.Frame.Clone();
         }
         private void Form1_FormClosing(object sender, FormClosingEventArgs e)
         {
             killCam();
-        }
-
-        private void button1_Click_1(object sender, EventArgs e)
-        {
-            Toggler();
+            Environment.Exit(0);
         }
 
         private async void timer1_Tick(object sender, EventArgs e)
         {
             //defines barcode
             BarcodeReader Reader = new BarcodeReader();
-            //
             pic = pictureBox1.Image;
             if(pic == null){return;}
             Result result;
-            try
-            {
-                result = Reader.Decode((Bitmap)pic);
-            }
-            catch
-            {
-                return;
-            }
+            try{result = Reader.Decode((Bitmap)pic);}catch{return;}
             if (result == null) { return; }
             string decoded = result.ToString().Trim();
             Console.WriteLine(decoded);
@@ -100,48 +91,32 @@ namespace BCPS_QrCode_Reader
                 //Converts data to Json Object
                 JObject data = JObject.Parse(response.Content.ReadAsStringAsync().Result);
                 //Displays the output message
-                MessageBox.Show($"{decoded} : {data.SelectToken("m").ToString()}");
-                timer1.Start();
+                Box box = new Box();
+                box.TextboxValue = $"{decoded} {Environment.NewLine} { data.SelectToken("m").ToString()}";
+                box.Show();
+                timer2.Start();
             }
         }
         //kills camera
         private void killCam()
         {
-            if (FinalFrame.IsRunning == true)
-            {
-                FinalFrame.Stop();
-                button1.Text = "Start";
-                pictureBox1.Image  = null;
-            }
+            if (FinalFrame == null) { return; }
+            if (FinalFrame.IsRunning == true){FinalFrame.SignalToStop();}
         }
-        //toggles on and off
-        private void Toggler()
+        private void timer2_Tick(object sender, EventArgs e)
         {
-            //on
-            if (ToggleState == false)
-            {
-                comboBox1.Enabled = false;
-                FinalFrame = new VideoCaptureDevice(CaptureDevice[comboBox1.SelectedIndex].MonikerString);
-                FinalFrame.NewFrame += new NewFrameEventHandler(FinalFrame_NewFrame);
-                FinalFrame.Start();
-                timer1.Enabled = true;
-                timer1.Start();
-                Console.WriteLine("Scanner Started");
-                button1.Text = "Stop";
-                ToggleState = true;
-            }
-            else //off
-            {
-                comboBox1.Enabled = true;
-                killCam();
-                button1.Text = "Start";
-                ToggleState = false;
-            }
+            timer1.Start();
+            timer2.Stop();
         }
 
-        private void pictureBox1_Click(object sender, EventArgs e)
+        private void comboBox1_SelectedIndexChanged(object sender, EventArgs e)
         {
-
+            timer1.Stop();
+            killCam();
+            FinalFrame = new VideoCaptureDevice(CaptureDevice[comboBox1.SelectedIndex].MonikerString);
+            FinalFrame.NewFrame += new NewFrameEventHandler(FinalFrame_NewFrame);
+            FinalFrame.Start();
+            timer1.Start();
         }
     }
 }
