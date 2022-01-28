@@ -7,7 +7,6 @@ using System.Windows.Forms;
 using System.Net.Http;
 using Newtonsoft.Json.Linq;
 using ZXing;
-using System.Threading;
 
 namespace BCPS_QrCode_Reader
 {
@@ -61,7 +60,7 @@ namespace BCPS_QrCode_Reader
             Bitmap pic = CamFeed;
             if(pic == null){return;}
             Result result;
-            result = new BarcodeReader().Decode(pic);
+            try { result = new BarcodeReader().Decode(pic); } catch { return; }
             if (result == null)return;
             if (result.ToString() != "")
             {
