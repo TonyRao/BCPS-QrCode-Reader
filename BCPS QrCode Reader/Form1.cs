@@ -4,19 +4,20 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Windows.Forms;
-using ZXing;
 using System.Net.Http;
 using Newtonsoft.Json.Linq;
+using ZXing;
 using System.Threading;
 
 namespace BCPS_QrCode_Reader
 {
-    public partial class Form1 : Form
+    public partial class Form1 : System.Windows.Forms.Form
     {
         Image pic;
         private FilterInfoCollection CaptureDevice;
         private VideoCaptureDevice FinalFrame;
         private static readonly HttpClient client = new HttpClient();
+        private Bitmap CamFeed;
         public Form1()
         {
             InitializeComponent();
@@ -44,8 +45,9 @@ namespace BCPS_QrCode_Reader
         }
         private void FinalFrame_NewFrame(object sender, NewFrameEventArgs eventArgs)
         {
+            CamFeed = (Bitmap)eventArgs.Frame.Clone();
             //makes picturebox1 = video camera feed
-            pictureBox1.Image = (Bitmap)eventArgs.Frame.Clone();
+            pictureBox1.Image = CamFeed;
         }
         private void Form1_FormClosing(object sender, FormClosingEventArgs e)
         {
@@ -56,15 +58,12 @@ namespace BCPS_QrCode_Reader
         private async void timer1_Tick(object sender, EventArgs e)
         {
             //defines barcode
-            BarcodeReader Reader = new BarcodeReader();
-            pic = pictureBox1.Image;
+            Bitmap pic = CamFeed;
             if(pic == null){return;}
             Result result;
-            try{result = Reader.Decode((Bitmap)pic);}catch{return;}
-            if (result == null) { return; }
-            string decoded = result.ToString().Trim();
-            Console.WriteLine(decoded);
-            if (decoded != "")
+            result = new BarcodeReader().Decode(pic);
+            if (result == null)return;
+            if (result.ToString() != "")
             {
                 //Stops Timer
                 timer1.Stop();
@@ -72,7 +71,7 @@ namespace BCPS_QrCode_Reader
                 var values = new Dictionary<string, string>
                 {
                     { "f", "gSI" },
-                    { "s", decoded }
+                    { "s", result.ToString() }
                 };
                 //packs the values
                 var content = new FormUrlEncodedContent(values);
@@ -86,22 +85,30 @@ namespace BCPS_QrCode_Reader
                 catch
                 {
                     MessageBox.Show("There was an error communicating with api. make sure your connected to the internet.");
+                    timer2.Start();
                     return;
                 }
-                //Converts data to Json Object
-                JObject data = JObject.Parse(response.Content.ReadAsStringAsync().Result);
-                //Displays the output message
-                Box box = new Box();
-                box.TextboxValue = $"{decoded} {Environment.NewLine} { data.SelectToken("m").ToString()}";
-                box.Show();
-                timer2.Start();
+                try
+                {
+                    //Converts data to Json Object
+                    JObject data = JObject.Parse(response.Content.ReadAsStringAsync().Result);
+                    //Displays the output message
+                    Box box = new Box();
+                    box.TextboxValue = $"{result} {Environment.NewLine} { data.SelectToken("m")}";
+                    box.Show();
+                    timer2.Start();
+                }
+                catch
+                {
+                    timer2.Start();
+                }
             }
         }
         //kills camera
         private void killCam()
         {
             if (FinalFrame == null) { return; }
-            if (FinalFrame.IsRunning == true){FinalFrame.SignalToStop();}
+            if (FinalFrame.IsRunning == true){FinalFrame.SignalToStop();return; }
         }
         private void timer2_Tick(object sender, EventArgs e)
         {
@@ -112,7 +119,13 @@ namespace BCPS_QrCode_Reader
         private void comboBox1_SelectedIndexChanged(object sender, EventArgs e)
         {
             timer1.Stop();
-            killCam();
+            if (FinalFrame != null)
+            {
+                if (FinalFrame.IsRunning == true) 
+                { 
+                    FinalFrame.SignalToStop();
+                }
+            }
             FinalFrame = new VideoCaptureDevice(CaptureDevice[comboBox1.SelectedIndex].MonikerString);
             FinalFrame.NewFrame += new NewFrameEventHandler(FinalFrame_NewFrame);
             FinalFrame.Start();
