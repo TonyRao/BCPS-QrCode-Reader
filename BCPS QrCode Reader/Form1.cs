@@ -7,12 +7,12 @@ using System.Windows.Forms;
 using System.Net.Http;
 using Newtonsoft.Json.Linq;
 using ZXing;
+using System.IO;
 
 namespace BCPS_QrCode_Reader
 {
     public partial class Form1 : System.Windows.Forms.Form
     {
-        Image pic;
         private FilterInfoCollection CaptureDevice;
         private VideoCaptureDevice FinalFrame;
         private static readonly HttpClient client = new HttpClient();
@@ -24,6 +24,9 @@ namespace BCPS_QrCode_Reader
 
         private void Form1_Load(object sender, EventArgs e)
         {
+            comboBox1.Width = this.Width - 200;
+            pictureBox1.Width = this.Width - 100;
+            pictureBox1.Height = this.Height - 150;
             //get cameras
             CaptureDevice = new FilterInfoCollection(FilterCategory.VideoInputDevice);
             //push cameras to list
@@ -42,15 +45,36 @@ namespace BCPS_QrCode_Reader
             timer1.Start();
             Console.WriteLine("Scanner Started");
         }
+
+        private void Form1_Resize(object sender, EventArgs e)
+        {
+            comboBox1.Width = this.Width - 200;
+            pictureBox1.Width = this.Width - 100;
+            pictureBox1.Height = this.Height - 150;
+        }
         private void FinalFrame_NewFrame(object sender, NewFrameEventArgs eventArgs)
         {
             CamFeed = (Bitmap)eventArgs.Frame.Clone();
+            CamFeed.RotateFlip(RotateFlipType.RotateNoneFlipX);
             //makes picturebox1 = video camera feed
-            pictureBox1.Image = CamFeed;
+            pictureBox1.BackgroundImage = CamFeed;
         }
         private void Form1_FormClosing(object sender, FormClosingEventArgs e)
         {
-            killCam();
+            try
+            {
+                if (FinalFrame == null) { Environment.Exit(0); }
+                if (FinalFrame.IsRunning == true)
+                {
+                    FinalFrame.SignalToStop();
+                    bool chvar = true;
+                    while (chvar) { if (FinalFrame.IsRunning != true) { chvar = false; } }
+                }
+            }
+            catch
+            {
+                
+            }
             Environment.Exit(0);
         }
 
@@ -83,7 +107,7 @@ namespace BCPS_QrCode_Reader
                 }
                 catch
                 {
-                    MessageBox.Show("There was an error communicating with api. make sure your connected to the internet.");
+                    MessageBox.Show("There was an error communicating with api. Make sure your connected to the internet.");
                     timer2.Start();
                     return;
                 }
@@ -94,7 +118,10 @@ namespace BCPS_QrCode_Reader
                     //Displays the output message
                     Box box = new Box();
                     box.TextboxValue = $"{result} {Environment.NewLine} { data.SelectToken("m")}";
-                    box.Show();
+                    box.StartPosition = FormStartPosition.Manual;
+                    box.Location = new Point(this.Location.X+((this.Width / 2)-(box.Width/2)),this.Location.Y+((this.Height / 2)-(box.Height/2)));
+                    box.ShowDialog();
+
                     timer2.Start();
                 }
                 catch
@@ -102,12 +129,6 @@ namespace BCPS_QrCode_Reader
                     timer2.Start();
                 }
             }
-        }
-        //kills camera
-        private void killCam()
-        {
-            if (FinalFrame == null) { return; }
-            if (FinalFrame.IsRunning == true){FinalFrame.SignalToStop();return; }
         }
         private void timer2_Tick(object sender, EventArgs e)
         {
@@ -120,15 +141,24 @@ namespace BCPS_QrCode_Reader
             timer1.Stop();
             if (FinalFrame != null)
             {
-                if (FinalFrame.IsRunning == true) 
-                { 
+                if (FinalFrame.IsRunning == true)
+                {
                     FinalFrame.SignalToStop();
+                    pictureBox1.BackgroundImage = Properties.Resources.funny2;
+                    bool chvar = true;
+                    while (chvar) {
+                        if (FinalFrame.IsRunning != true) 
+                        { 
+                            chvar = false;
+                            FinalFrame = new VideoCaptureDevice(CaptureDevice[comboBox1.SelectedIndex].MonikerString);
+                            FinalFrame.NewFrame += new NewFrameEventHandler(FinalFrame_NewFrame);
+                            FinalFrame.Start();
+                            timer1.Start();
+                        } 
+                    }
+                    
                 }
             }
-            FinalFrame = new VideoCaptureDevice(CaptureDevice[comboBox1.SelectedIndex].MonikerString);
-            FinalFrame.NewFrame += new NewFrameEventHandler(FinalFrame_NewFrame);
-            FinalFrame.Start();
-            timer1.Start();
         }
     }
 }
